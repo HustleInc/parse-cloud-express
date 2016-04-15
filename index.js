@@ -122,7 +122,7 @@ var afterDelete = function(className, handler) {
 }
 
 var define = function(functionName, handler) {
-  app.post('/function_' + functionName, updateRequestInstallationId, updateRequestFunctionParams, addParseResponseMethods, inflateParseUser, handler);
+  app.post('/' + functionName, updateRequestInstallationId, updateRequestFunctionParams, addParseResponseMethods, inflateParseUser, handler);
   Routes['function'].push(functionName);
 };
 
