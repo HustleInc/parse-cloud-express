@@ -14,13 +14,7 @@ var bodyParser = require('body-parser');
 var Parse = global.Parse || require('parse/node').Parse;
 var Request = require('request');
 
-var Routes = {
-  'beforeSave': [],
-  'afterSave': [],
-  'beforeDelete': [],
-  'afterDelete': [],
-  'function': []
-};
+var Triggers = {};
 
 // Make sure to set your Webhook key via heroku config set or local environment variable
 var webhookKey = process.env.PARSE_WEBHOOK_KEY;
@@ -78,6 +72,12 @@ function inflateParseUser(req, res, next) {
   next();
 }
 
+var respondEmptyIfPossible = function(req, res, next) {
+  if (req.body.triggerName.startsWith('after')) {
+    res.status(200).send({});
+  }
+  next();
+};
 
 var successResponse = function(res, data) {
   data = data || true;
@@ -89,41 +89,66 @@ var errorResponse = function(res, message) {
   res.status(200).send({ "error" : message });
 }
 
-var emptyResponse = function(req, res, next) {
-  res.status(200).send({});
-  next();
-};
-
-var app = express();
 var jsonParser = bodyParser.json();
 
-// All requests handled by this app will require the correct webhook key header
-app.use(validateWebhookRequest);
-app.use(jsonParser);
+var cloudFunctionApp = express();
+cloudFunctionApp.use(validateWebhookRequest);
+cloudFunctionApp.use(jsonParser)
+
+var cloudFuncMiddlewares = [
+  updateRequestInstallationId,
+  updateRequestFunctionParams,
+  addParseResponseMethods,
+  inflateParseUser,
+];
+
+var triggerApp = express();
+triggerApp.use(validateWebhookRequest);
+triggerApp.use(jsonParser)
+
+var triggerMiddlewares = [
+  updateRequestInstallationId,
+  addParseResponseMethods,
+  inflateParseObject,
+  inflateParseUser,
+  respondEmptyIfPossible
+]
+
+function triggerHandler(request, response) {
+  const triggerName = request.body.triggerName;
+  const className = request.body.object.className;
+  Triggers[className][triggerName](request, response);
+}
+
+function registerTrigger(className, trigger, handler) {
+  var classTriggers = Triggers[className];
+  if (!classTriggers) {
+    Triggers[className] = {};
+    classTriggers = Triggers[className];
+  }
+  Triggers[className][trigger] = handler;
+  triggerApp.post('/', triggerMiddlewares, triggerHandler);
+}
+
 
 var beforeSave = function(className, handler) {
-  app.post('/beforeSave_' + className, updateRequestInstallationId, addParseResponseMethods, inflateParseObject, inflateParseUser, handler);
-  Routes['beforeSave'].push(className);
+  registerTrigger(className, 'beforeSave', handler)
 };
 
 var afterSave = function(className, handler) {
-  app.post('/afterSave_' + className, updateRequestInstallationId, addParseResponseMethods, inflateParseObject, inflateParseUser, emptyResponse, handler);
-  Routes['afterSave'].push(className);
+  registerTrigger(className, 'afterSave', handler)
 };
 
 var beforeDelete = function(className, handler) {
-  app.post('/beforeDelete_' + className, updateRequestInstallationId, addParseResponseMethods, inflateParseObject, inflateParseUser, handler);
-  Routes['beforeDelete'].push(className);
+  registerTrigger(className, 'beforeDelete', handler)
 }
 
 var afterDelete = function(className, handler) {
-  app.post('/afterDelete_' + className, updateRequestInstallationId, addParseResponseMethods, inflateParseObject, inflateParseUser, emptyResponse, handler);
-  Routes['afterDelete'].push(className);
+  registerTrigger(className, 'afterDelete', handler)
 }
 
 var define = function(functionName, handler) {
-  app.post('/' + functionName, updateRequestInstallationId, updateRequestFunctionParams, addParseResponseMethods, inflateParseUser, handler);
-  Routes['function'].push(functionName);
+  cloudFunctionApp.post('/' + functionName, cloudFuncMiddlewares, handler);
 };
 
 function inflateObjectsToClassNames(methodToWrap) {
@@ -148,6 +173,6 @@ module.exports = {
   Parse: Parse,
   successResponse: successResponse,
   errorResponse: errorResponse,
-  app: app,
-  Routes: Routes
+  triggerApp: triggerApp,
+  cloudFunctionApp: cloudFunctionApp,
 };
