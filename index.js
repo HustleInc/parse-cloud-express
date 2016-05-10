@@ -40,7 +40,7 @@ function inflateParseObject(req, res, next) {
 // Middleware to create the .success and .error methods expected by a Cloud Code function
 function addParseResponseMethods(req, res, next) {
   res.success = function(data) {
-    successResponse(res, data);
+    successResponse(res, Parse._encode(data));
   };
   res.error = function(data) {
     errorResponse(res, data);
