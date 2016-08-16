@@ -43,6 +43,7 @@ function addParseResponseMethods(req, res, next) {
     successResponse(res, data);
   };
   res.error = function(data) {
+    console.error(data);
     errorResponse(res, data);
   };
   next();
@@ -106,9 +107,16 @@ var triggerApp = express();
 triggerApp.use(validateWebhookRequest);
 triggerApp.use(jsonParser)
 
-var triggerMiddlewares = [
+var beforeMiddlewares = [
   updateRequestInstallationId,
   addParseResponseMethods,
+  inflateParseObject,
+  inflateParseUser,
+  respondEmptyIfPossible
+]
+
+var afterMiddlewares = [
+  updateRequestInstallationId,
   inflateParseObject,
   inflateParseUser,
   respondEmptyIfPossible
@@ -127,7 +135,8 @@ function registerTrigger(className, trigger, handler) {
     classTriggers = Triggers[className];
   }
   Triggers[className][trigger] = handler;
-  triggerApp.post('/', triggerMiddlewares, triggerHandler);
+  const middlewares = trigger.startsWith('before') ? beforeMiddlewares : afterMiddlewares;
+  triggerApp.post('/', middlewares, triggerHandler);
 }
 
 
