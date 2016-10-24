@@ -21,7 +21,9 @@ var webhookKey = process.env.PARSE_WEBHOOK_KEY;
 
 // Middleware to enforce security using the Webhook Key
 function validateWebhookRequest(req, res, next) {
-  if (req.get('X-Parse-Webhook-Key') !== webhookKey) return errorResponse(res, 'Unauthorized Request.');
+  if (req.get('X-Parse-Webhook-Key') !== webhookKey) {
+    return errorResponse(res, 'Unauthorized Request.');
+  }
   next();
 }
 
@@ -43,7 +45,6 @@ function addParseResponseMethods(req, res, next) {
     successResponse(res, data);
   };
   res.error = function(data) {
-    console.error(data);
     errorResponse(res, data);
   };
   next();
@@ -87,7 +88,11 @@ var successResponse = function(res, data) {
 
 var errorResponse = function(res, message) {
   message = message || true;
-  res.status(200).send({ "error" : message });
+  try {
+    res.status(200).send({ "error" : message });
+  } catch(error) {
+    console.error(`Sent headers twice for error message: ${message}`);
+  }
 }
 
 var jsonParser = bodyParser.json();
